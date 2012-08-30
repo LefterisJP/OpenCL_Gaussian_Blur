@@ -146,7 +146,7 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
     //create the pointer that will hold the new (blurred) image data
     unsigned char* newData;
     RF_MALLOC(newData,imgSize);
-    // Read in the kernel code into a string array
+    // Read in the kernel code into a c string
     FILE* f;
     char* kernelSource;
     size_t kernelSrcSize;

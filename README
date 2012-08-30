@@ -6,7 +6,7 @@ http://refu.realintelligence.net
 
 In order to properly compile and run it you should download the OpenCL SDK and link against the OpenCL library and headers.
 
-Additionally you need to make sure that the compiler is linked to refu.dll and is looking for header files in:
+Additionally you need to make sure that the compiler is linked to refu.dll/refu.so and is looking for header files in:
 * refu     || For the few refu dependencides
 * include  || for the project's header files
 
