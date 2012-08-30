@@ -131,6 +131,7 @@ typedef struct ME_ImageBMP
 //! @return The initialized BMP object
 ME_ImageBMP* meImageBMP_Create(char* filename);
 //! Initializes a bmp image object from a file
+//!
 //! @param bmp The bmp object to initialize
 //! @param filename The name of the file from which to initialize the image
 //! @return true for succesfull initialization and false otherwise

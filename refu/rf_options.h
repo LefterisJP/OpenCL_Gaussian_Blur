@@ -9,9 +9,13 @@
 
 #ifndef RF_IAMHERE_FOR_DOXYGEN //I don't want doxygen's preprocessor to have these includes when it runs
 
-#ifndef REFU_WIN32_VERSION
+//determine the OS
+#ifdef _WIN32
 	#define REFU_WIN32_VERSION
+#else
+	#define REFU_LINUX_VERSION
 #endif
+
 #define _FILE_OFFSET_BITS 64
 #ifndef RF_OPTION_THREADX_MSGQUEUE
 	#define RF_OPTION_THREADX_MSGQUEUE 10

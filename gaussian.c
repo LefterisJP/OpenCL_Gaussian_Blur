@@ -54,6 +54,7 @@ float* createGaussianKernel(uint32_t size,float sigma)
     uint32_t x,y;
     double center = size/2;
     float sum = 0;
+    //allocate and create the gaussian kernel
     RF_MALLOC(ret,sizeof(float)*size*size);
     for(x = 0; x < size; x++)
     {
@@ -96,12 +97,10 @@ char pna_blur_cpu(char* imgname,uint32_t size,float sigma)
         printf("Image \"%s\" could not be read as a .BMP file\n",imgname);
         return false;
     }
-    //find the size of one line of the image
+    //find the size of one line of the image in bytes and the center of the gaussian kernel
     imgLineSize = bmp.imgWidth*3;
     center = size/2;
-
-
-    //for every valid pixel compute its new value with the kernel
+    //convolve all valid pixels with the gaussian kernel
     for(i = imgLineSize*(size-center)+center*3; i < bmp.imgHeight*bmp.imgWidth*3-imgLineSize*(size-center)-center*3;i++)
     {
         value = 0;
@@ -126,10 +125,8 @@ char pna_blur_cpu(char* imgname,uint32_t size,float sigma)
         }
         bmp.imgData[i] = value;
     }
-
-
+    //free memory and save the image
     free(matrix);
-    //save the image
     meImageBMP_Save(&bmp,"cpu_blur.bmp");
     return true;
 }
@@ -144,31 +141,28 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
     ME_ImageBMP bmp;
     meImageBMP_Init(&bmp,imgname);
     imgSize = bmp.imgWidth*bmp.imgHeight*3;
-
     //create the gaussian kernel
     matrix = createGaussianKernel(size,sigma);
-
-    //create the pointer of the new data
+    //create the pointer that will hold the new (blurred) image data
     unsigned char* newData;
     RF_MALLOC(newData,imgSize);
     // Read in the kernel code into a string array
-    FILE *fp;
-    char *kernelSource;
+    FILE* f;
+    char* kernelSource;
     size_t kernelSrcSize;
-    fp = fopen("kernel.cl", "r");
-    if (!fp)
+    if( (f = fopen("kernel.cl", "r")) == NULL)
     {
         fprintf(stderr, "Failed to load OpenCL kernel code.\n");
         return false;
     }
     RF_MALLOC(kernelSource,MAX_SOURCE_SIZE)
-    kernelSrcSize = fread( kernelSource, 1, MAX_SOURCE_SIZE, fp);
-    fclose(fp);
+    kernelSrcSize = fread( kernelSource, 1, MAX_SOURCE_SIZE, f);
+    fclose(f);
 
     //Get platform and device information
-    cl_platform_id platformID = NULL;//ignore the OpenCL platform argument
-    cl_uint platformsN; //ignore the available OpenCL platforms number argument
-    cl_device_id deviceID = NULL; //ignore the specific OpenCL device id argument
+    cl_platform_id platformID;//will hold the ID of the openCL available platform
+    cl_uint platformsN;//will hold the number of openCL available platforms on the machine
+    cl_device_id deviceID;//will hold the ID of the openCL device
     cl_uint devicesN; //will hold the number of OpenCL devices in the system
     if(clGetPlatformIDs(1, &platformID, &platformsN) != CL_SUCCESS)
     {
@@ -194,6 +188,10 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Could not create an OpenCL Command Queue\n");
         return false;
     }
+#ifdef MEASURE_COMM_OVERHEAD
+    RF_Timer timer;
+    rfTimer_Init(&timer,RF_TIMER_MICROSECONDS);
+#endif
     /// Create memory buffers on the device for the two images
     cl_mem gpuImg = clCreateBuffer(context,CL_MEM_READ_ONLY,imgSize,NULL,&ret);
     if(ret != CL_SUCCESS)
@@ -213,7 +211,6 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Unable to create the GPU image buffer object\n");
         return false;
     }
-
     //Copy the image data and the gaussian kernel to the memory buffer
     if(clEnqueueWriteBuffer(cmdQueue, gpuImg, CL_TRUE, 0,imgSize,bmp.imgData, 0, NULL, NULL) != CL_SUCCESS)
     {
@@ -225,7 +222,6 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Error during sending the gaussian kernel to the OpenCL buffer\n");
         return false;
     }
-
     //Create a program object and associate it with the kernel's source code.
     cl_program program = clCreateProgramWithSource(context, 1,(const char **)&kernelSource, (const size_t *)&kernelSrcSize, &ret);
     free(kernelSource);
@@ -234,7 +230,6 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Error in creating an OpenCL program object\n");
         return false;
     }
-
     //Build the created OpenCL program
     if((ret = clBuildProgram(program, 1, &deviceID, NULL, NULL, NULL))!= CL_SUCCESS)
     {
@@ -252,7 +247,6 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         free(buildLog);
         return false;
     }
-
     // Create the OpenCL kernel. This is basically one function of the program declared with the __kernel qualifier
     cl_kernel kernel = clCreateKernel(program, "gaussian_blur", &ret);
     if(ret != CL_SUCCESS)
@@ -291,15 +285,24 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Could not set the kernel's \"gpuNewImg\" argument\n");
         return false;
     }
-
+#ifdef MEASURE_COMM_OVERHEAD
+    double units = rfTimer_Query(&timer,RF_TIMER_MICROSECONDS);
+#endif
     ///enqueue the kernel into the OpenCL device for execution
     size_t globalWorkItemSize = imgSize;//the total size of 1 dimension of the work items. Basically the whole image buffer size
     size_t workGroupSize = 64; //The size of one work group
     ret = clEnqueueNDRangeKernel(cmdQueue, kernel, 1, NULL, &globalWorkItemSize, &workGroupSize,0, NULL, NULL);
+
+#ifdef MEASURE_COMM_OVERHEAD
+    rfTimer_Query(&timer,RF_TIMER_MICROSECONDS);
+#endif
     ///Read the memory buffer of the new image on the device to the new Data local variable
     ret = clEnqueueReadBuffer(cmdQueue, gpuNewImg, CL_TRUE, 0,imgSize, newData, 0, NULL, NULL);
-
-    /// Clean up
+#ifdef MEASURE_COMM_OVERHEAD
+    units += rfTimer_Query(&timer,RF_TIMER_MICROSECONDS);
+    printf("GPU communication overhead is %f microseconds\n",units);
+#endif
+    ///Clean up everything
     free(matrix);
     clFlush(cmdQueue);
     clFinish(cmdQueue);
@@ -310,7 +313,6 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
     clReleaseMemObject(gpuNewImg);
     clReleaseCommandQueue(cmdQueue);
     clReleaseContext(context);
-
     ///save the new image and return success
     bmp.imgData = newData;
     meImageBMP_Save(&bmp,"gpu_blur.bmp");

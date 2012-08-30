@@ -32,6 +32,9 @@
 #ifndef GAUSSIAN_H
 #define GAUSSIAN_H
 
+//uncomment if you want to measure the communication overhead instead of normally running the program
+//#define MEASURE_COMM_OVERHEAD
+
 #include "bitmap.h"
 #include <rf_setup.h>
 

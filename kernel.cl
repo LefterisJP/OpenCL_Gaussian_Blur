@@ -1,16 +1,15 @@
+//The Gaussian blur function that runs on the gpu
 __kernel void gaussian_blur(__global const unsigned char *image, __global const float* G, const int W,const int H,const int size, __global unsigned char* newImg) 
 { 
 	unsigned int x,y,imgLineSize,center;
 	float value;
 	int i,xOff,yOff;
-    // Get the index of the current element to be processed
+    //Get the index of the current element being processed
     i = get_global_id(0);
- 
 	//Calculate some needed variables
 	imgLineSize = W*3;
 	center = size/2;
-	
-	//pass the pixel through the kernel if it's not in the edge
+	//pass the pixel through the kernel if it can be centered inside it
 	if(i >= imgLineSize*(size-center)+center*3 &&
 	   i < W*H*3-imgLineSize*(size-center)-center*3)
 	{

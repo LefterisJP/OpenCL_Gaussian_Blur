@@ -31,6 +31,11 @@
 #include <stdlib.h>
 
 
+char helpStr[] = {"Usage:\n\t-h\t Displays this help message\n\t\-i\tThe name of the input image for blurring\n\
+\t-g\tThe size of the gaussian kernel. Default is 3\n\
+\t-s\tThe sigma parameter of the gaussian. Default is 0.8\n\
+"};
+
 char readArguments(int argc, char *argv[],char** imgname,uint32_t* gaussianSize,float* gaussianSigma)
 {
     uint32_t i;
