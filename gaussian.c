@@ -106,20 +106,10 @@ char pna_blur_cpu(char* imgname,uint32_t size,float sigma)
         value = 0;
         for(y=0;y<size;y++)
         {
-            if(y < center)
-                yOff = -imgLineSize*(size-center);
-            else if( y > center)
-                yOff = imgLineSize*(size-center);
-            else
-                yOff = 0;
+            yOff = imgLineSize*(y-center);
             for(x=0;x<size;x++)
             {
-                if(x < center)
-                    xOff = -3*(center-x);
-                else if( x > center)
-                    xOff = 3*(x-center);
-                else
-                    xOff = 0;
+                xOff = 3*(x - center);
                 value += matrix[y*size+x]*bmp.imgData[i+xOff+yOff];
             }
         }
