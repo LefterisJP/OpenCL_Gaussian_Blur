@@ -1,8 +1,6 @@
 This is the code that support the "Playing with OpenCL: Gaussian Blurring" tutorial at
 http://blog.refu.co/?p=663
 
-Even though the code is almost sa
-
 In order to properly compile and run it you should download the OpenCL SDK and link against the OpenCL library and headers.
 
 Additionally you need to add the "include" directory to the compiler's include path
