@@ -6,8 +6,12 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h> //for memcpy
-#include <arpa/inet.h>
 
+#ifdef _WIN32
+#include <Winsock2.h>
+#else
+#include <arpa/inet.h>
+#endif
 
 static void swap_endian_ui(unsigned int *v)
 {
