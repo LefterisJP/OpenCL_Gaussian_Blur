@@ -1,37 +1,8 @@
-/**
-** This sourcecode is part of the article on OpenCL and Gaussian blurring located here
-** http://lefteris.realintelligence.net/?p=663
-** For any feedback/comments/criticism please contact me: lefteris@realintelligence.net
-** The code is licensed under the BSD3 license shown below. Basically you can do whatever you want with it
-** as long as you give credit where it's due.
-**
-** -- License Begins --
-** Copyright (c) 2011-2012, Karapetsas Eleftherios
-** All rights reserved.
-**
-** Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-**  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-**  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the distribution.
-**  3. Neither the name of the Original Author of Refu nor the names of its contributors may be used to endorse or promote products derived from
-**
-**  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-**  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-**  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-**  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-**  SERVICES;LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-**  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-**  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-**
-** -- License Ends --
-**/
-
-
 #include <bitmap.h>
 #include <gaussian.h>
-#include <Time/rfc_timer.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
@@ -55,7 +26,7 @@ float* createGaussianKernel(uint32_t size,float sigma)
     double center = size/2;
     float sum = 0;
     //allocate and create the gaussian kernel
-    RF_MALLOC(ret,sizeof(float)*size*size);
+    ret = malloc(sizeof(float) * size * size);
     for(x = 0; x < size; x++)
     {
         for(y=0; y < size; y++)
@@ -135,7 +106,7 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
     matrix = createGaussianKernel(size,sigma);
     //create the pointer that will hold the new (blurred) image data
     unsigned char* newData;
-    RF_MALLOC(newData,imgSize);
+    newData = malloc(imgSize);
     // Read in the kernel code into a c string
     FILE* f;
     char* kernelSource;
@@ -145,7 +116,7 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         fprintf(stderr, "Failed to load OpenCL kernel code.\n");
         return false;
     }
-    RF_MALLOC(kernelSource,MAX_SOURCE_SIZE)
+    kernelSource = malloc(MAX_SOURCE_SIZE);
     kernelSrcSize = fread( kernelSource, 1, MAX_SOURCE_SIZE, f);
     fclose(f);
 
@@ -178,10 +149,7 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Could not create an OpenCL Command Queue\n");
         return false;
     }
-#ifdef MEASURE_COMM_OVERHEAD
-    RF_Timer timer;
-    rfTimer_Init(&timer,RF_TIMER_MICROSECONDS);
-#endif
+
     /// Create memory buffers on the device for the two images
     cl_mem gpuImg = clCreateBuffer(context,CL_MEM_READ_ONLY,imgSize,NULL,&ret);
     if(ret != CL_SUCCESS)
@@ -226,7 +194,7 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Failed to build the OpenCL program\n");
         //create the log string and show it to the user. Then quit
         char* buildLog;
-        RF_MALLOC(buildLog,MAX_LOG_SIZE);
+        buildLog = malloc(MAX_LOG_SIZE);
         if(clGetProgramBuildInfo(program,deviceID,CL_PROGRAM_BUILD_LOG,MAX_LOG_SIZE,buildLog,NULL) != CL_SUCCESS)
         {
             printf("Could not get any Build info from OpenCL\n");
@@ -275,23 +243,16 @@ char pna_blur_gpu(char* imgname,uint32_t size,float sigma)
         printf("Could not set the kernel's \"gpuNewImg\" argument\n");
         return false;
     }
-#ifdef MEASURE_COMM_OVERHEAD
-    double units = rfTimer_Query(&timer,RF_TIMER_MICROSECONDS);
-#endif
+
     ///enqueue the kernel into the OpenCL device for execution
     size_t globalWorkItemSize = imgSize;//the total size of 1 dimension of the work items. Basically the whole image buffer size
     size_t workGroupSize = 64; //The size of one work group
     ret = clEnqueueNDRangeKernel(cmdQueue, kernel, 1, NULL, &globalWorkItemSize, &workGroupSize,0, NULL, NULL);
 
-#ifdef MEASURE_COMM_OVERHEAD
-    rfTimer_Query(&timer,RF_TIMER_MICROSECONDS);
-#endif
+
     ///Read the memory buffer of the new image on the device to the new Data local variable
     ret = clEnqueueReadBuffer(cmdQueue, gpuNewImg, CL_TRUE, 0,imgSize, newData, 0, NULL, NULL);
-#ifdef MEASURE_COMM_OVERHEAD
-    units += rfTimer_Query(&timer,RF_TIMER_MICROSECONDS);
-    printf("GPU communication overhead is %f microseconds\n",units);
-#endif
+
     ///Clean up everything
     free(matrix);
     clFlush(cmdQueue);

@@ -1,50 +1,37 @@
-/**
-** This sourcecode is part of the article on OpenCL and Gaussian blurring located here
-** http://lefteris.realintelligence.net/?p=663
-** For any feedback/comments/criticism please contact me: lefteris@realintelligence.net
-** The code is licensed under the BSD3 license shown below. Basically you can do whatever you want with it
-** as long as you give credit where it's due.
-**
-** -- License Begins --
-** Copyright (c) 2011-2012, Karapetsas Eleftherios
-** All rights reserved.
-**
-** Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-**  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-**  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the distribution.
-**  3. Neither the name of the Original Author of Refu nor the names of its contributors may be used to endorse or promote products derived from
-**
-**  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-**  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-**  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-**  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-**  SERVICES;LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-**  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-**  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-**
-** -- License Ends --
-**/
-
-
-
 #include <bitmap.h>
-#include <rf_setup.h>
 #include <math.h> //for the ceiling function
 
 
 #include <stdlib.h> //for malloc
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h> //for memcpy
+#include <arpa/inet.h>
 
-#include <rf_utils.h>
 
+static void swap_endian_ui(unsigned int *v)
+{
+   *v = (*v>>24) | ((*v<<8) & 0x00FF0000) |
+    ((*v>>8) & 0x0000FF00) | (*v<<24);
+}
+static void swap_endian_us(unsigned short *v)
+{
+    *v = (*v>>8)|(*v<<8);
+}
+
+static bool is_big_endian()
+{
+    if (htonl(47) == 47) {
+        return true;
+    }
+    return false;
+}
 
 // Initializes and returns a bmp image object from a file
 ME_ImageBMP* meImageBMP_Create(char* fileName)
 {
     ME_ImageBMP* ret;
-    RF_MALLOC(ret,sizeof(ME_ImageBMP));
+    ret = malloc(sizeof(ME_ImageBMP));
     //try to initialize it and if it fails return 0
     if(meImageBMP_Init(ret,fileName) == false)
     {
@@ -78,29 +65,29 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
 
     //0x02 From the BMP HEADER: Read the size of the file
     bmp->fileSize = bmpH.fileSize;
-    if(rfUTILS_Endianess() == RF_BIG_ENDIAN)//.bmp is always litle endian so if the system is big endian make sure to change it
+    if(is_big_endian())//.bmp is always litle endian so if the system is big endian make sure to change it
     {
-        rfUTILS_SwapEndianUI(&bmp->fileSize);
-        rfUTILS_SwapEndianUI(&bmpH.dataOffset);
+        swap_endian_ui(&bmp->fileSize);
+        swap_endian_ui(&bmpH.dataOffset);
     }
 
 
     //Read the BITMAP Info file header (40 bytes)
     fread(&bmpIH,sizeof(BitmapInfoHeader),1,f);
 
-    if(rfUTILS_Endianess() == RF_BIG_ENDIAN)//.bmp is always litle endian so if the system is big endian make sure to change it
+    if(is_big_endian())//.bmp is always litle endian so if the system is big endian make sure to change it
     {
-        rfUTILS_SwapEndianUI(&bmpIH.headerSize);
-        rfUTILS_SwapEndianUI(&bmpIH.compressionMethod);
-        rfUTILS_SwapEndianUI((unsigned int*) &bmpIH.imgWidth); //casting them since we only do byte level manipulation
-        rfUTILS_SwapEndianUI((unsigned int*) &bmpIH.imgHeight);
-        rfUTILS_SwapEndianUS(&bmpIH.colorPlanes);
-        rfUTILS_SwapEndianUS(&bmpIH.bpp);
-        rfUTILS_SwapEndianUI(&bmpIH.rawSize);
-        rfUTILS_SwapEndianUI((unsigned int*)&bmpIH.horResolution);
-        rfUTILS_SwapEndianUI((unsigned int*)&bmpIH.verResolution);
-        rfUTILS_SwapEndianUI(&bmpIH.numIColors);
-        rfUTILS_SwapEndianUI(&bmpIH.numColors);
+        swap_endian_ui(&bmpIH.headerSize);
+        swap_endian_ui(&bmpIH.compressionMethod);
+        swap_endian_ui((unsigned int*) &bmpIH.imgWidth); //casting them since we only do byte level manipulation
+        swap_endian_ui((unsigned int*) &bmpIH.imgHeight);
+        swap_endian_us(&bmpIH.colorPlanes);
+        swap_endian_us(&bmpIH.bpp);
+        swap_endian_ui(&bmpIH.rawSize);
+        swap_endian_ui((unsigned int*)&bmpIH.horResolution);
+        swap_endian_ui((unsigned int*)&bmpIH.verResolution);
+        swap_endian_ui(&bmpIH.numIColors);
+        swap_endian_ui(&bmpIH.numColors);
 
     }
 
@@ -111,7 +98,6 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
     //no compression method is supported yet, so make sure that it is uncompressed
     if(bmpIH.compressionMethod != 0)
     {
-        LOG_ERROR("In loading .bmp file \"%s\" an unsupported compression method was encountered",RF_FAILURE,fileName);
         return false;
     }
 
@@ -124,7 +110,7 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
         //The number of colours which is 2^n  , where n is the bits per pixel of the image
         numColors = 1 << bmpIH.bpp;
         //create the color table accordingly
-        RF_MALLOC(bmp->colorTable,sizeof(BitmapBGRR)*numColors);
+        bmp->colorTable = malloc(sizeof(BitmapBGRR)*numColors);
         fread(bmp->colorTable,sizeof(BitmapBGRR),numColors,f);
     }
 
@@ -138,7 +124,7 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
     unsigned int dataSize = bmp->imgHeight*imgWidthBytes;
     //a buffer to hold the data of the bitmap file we are going to read, we don't read it from the header since it might be zero some times there
     unsigned char* dataBuff;
-    RF_MALLOC(dataBuff,dataSize);
+    dataBuff = malloc(dataSize);
 
     //read the data from the bitmap file
     fread(dataBuff,1,dataSize,f);
@@ -154,7 +140,7 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
         {
             case 24:
                 //allocate the new image
-                RF_MALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight*3);
+                bmp->imgData = malloc(bmp->imgWidth*bmp->imgHeight*3);
                 bmp->type = ME_24BIT_BMP;
                 //i is counter for bytes in the image, j is counter for bytes in the bitmap file
                 for(i=0,j=0;j<dataSize-3;i+=3,j+=3)
@@ -173,16 +159,15 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
 
             case 8:
                 //allocate the new image
-                RF_MALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight*3);
+                bmp->imgData = malloc(bmp->imgWidth*bmp->imgHeight*3);
                 bmp->type = ME_8BIT_BMP;
                 //! @todo implement it
-                LOG_ERROR("Not yet implemented the .bmp file loading of 8 bits per pixel",0);
                 return false;
             break;
 
             case 4:
                 //allocate the new image
-                RF_MALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight*3);
+                bmp->imgData = malloc(bmp->imgWidth*bmp->imgHeight*3);
 
                 bmp->type = ME_4BIT_BMP;
                 int choffset;
@@ -231,7 +216,7 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
             unsigned int rowBitIndex = 0;
             unsigned short bitIndex = 0;
             //allocate the new image
-            RF_CALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight,1);
+            bmp->imgData = calloc(bmp->imgWidth*bmp->imgHeight,1);
             //normally 1 bit bitmap can be a 2 color bitmap.
             bmp->type = ME_1BIT_BMP;
             //for each byte of the data
@@ -261,7 +246,6 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
         }
         break;
         default:
-            LOG_ERROR("Unknown value for the bits per pixel field found while reading the \"\%s\" file",RF_FAILURE,fileName);
             return false;
         break;
         }//end of bits per pixel switch
@@ -275,7 +259,7 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
         {
             case 24:
                 //allocate the new image
-                RF_MALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight*3);
+                bmp->imgData = malloc(bmp->imgWidth*bmp->imgHeight*3);
                 bmp->type = ME_24BIT_BMP;
                 //counting backwards thanks to j
                 //i is counter for bytes in the image, j is counter for bytes in the bitmap file
@@ -295,16 +279,15 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
 
             case 8:
                 //allocate the new image
-                RF_MALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight*3);
+                bmp->imgData = malloc(bmp->imgWidth*bmp->imgHeight*3);
                 bmp->type = ME_24BIT_BMP;
                 //! @todo implement it
-                LOG_ERROR("Not yet implemented the .bmp file loading of 8 bits per pixel",0);
                 return false;
             break;
 
             case 4://not tested
                 //allocate the new image
-                RF_MALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight*3);
+                bmp->imgData = malloc(bmp->imgWidth*bmp->imgHeight*3);
                 bmp->type = ME_4BIT_BMP;
                 int choffset;
                 if(offset!=0)
@@ -352,14 +335,12 @@ char meImageBMP_Init(ME_ImageBMP* bmp,char* fileName)
 
             case 1:
                 //allocate the new image
-                RF_MALLOC(bmp->imgData,bmp->imgWidth*bmp->imgHeight*3);
+                bmp->imgData = malloc(bmp->imgWidth*bmp->imgHeight*3);
                 bmp->type = ME_1BIT_BMP;
                 //! @todo implement
-                LOG_ERROR("Not yet implement reverse .bmp image 1 bit per pixel loading",0);
                 return false;
             break;
             default:
-                LOG_ERROR("Unknown value for the bits per pixel field found while reading the \"\%s\" file",RF_FAILURE,fileName);
                 return false;
             break;
         }//end of bpp switch
@@ -421,7 +402,7 @@ int meImageBMP_Save(ME_ImageBMP* bmp,char* fileName)
 
     //a buffer to hold the data of the bitmap file we are going to write, we don't read it from the header since it might be zero some times there
     unsigned char* dataBuff;
-    RF_MALLOC(dataBuff,dataSize);
+    dataBuff = malloc(dataSize);
     //i is counter for bytes in the image, j is counter for bytes in the bitmap file
     for(i=0,j=0;j<dataSize-3;i+=3,j+=3)
     {
@@ -438,7 +419,7 @@ int meImageBMP_Save(ME_ImageBMP* bmp,char* fileName)
     //write the data
     fwrite(dataBuff,dataSize,1,f);
     fclose(f);
-    return RF_SUCCESS;
+    return 1;
 }
 
 // Destroys a BMP image object releasing its memory

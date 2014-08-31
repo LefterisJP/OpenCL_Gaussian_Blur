@@ -35,3 +35,5 @@ infoLog
 *.depend
 *.layout
 *.xlsx
+
+opencl-tutorial

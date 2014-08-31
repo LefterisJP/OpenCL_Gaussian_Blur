@@ -1,14 +1,13 @@
 This is the code that support the "Playing with OpenCL: Gaussian Blurring" tutorial at
-http://lefteris.realintelligence.net/?p=663
+http://blog.refu.co/?p=663
 
-Even though the code is almost standalone it has a few dependencies on the Refu library.
-http://refu.realintelligence.net
+Even though the code is almost sa
 
 In order to properly compile and run it you should download the OpenCL SDK and link against the OpenCL library and headers.
 
-Additionally you need to make sure that the compiler is linked to refu.dll/refu.so and is looking for header files in:
-* refu     || For the few refu dependencides
-* include  || for the project's header files
+Additionally you need to add the "include" directory to the compiler's include path
+
+For your convenience there is a simple makefile included.
 
 After compiling the usage of the program is pretty simple. The legal arguments you can pass to it are:
 -h		Displays this help message
@@ -16,5 +15,5 @@ After compiling the usage of the program is pretty simple. The legal arguments y
 -g		The size of the gaussian kernel. Default is 3
 -s		The sigma parameter of the gaussian. Default is 0.8
 
-For any questions/comments/feedback contact me at lefteris *At* realintelligence.net
+For any questions/comments/feedback contact me at lefteris *At* refu *DOT* co
 
